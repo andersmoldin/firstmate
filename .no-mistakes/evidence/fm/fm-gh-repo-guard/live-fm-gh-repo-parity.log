@@ -1,0 +1,15 @@
+## fm-gh-repo.sh vs the real gh's own choice inside the same clone
+origin=cli/cli + upstream=octocat/Hello-World           fm-gh-repo=octocat/Hello-World
+[exit 0] gh=octocat/Hello-World
+(gh repo set-default cli/cli -> remote.origin.gh-resolved base)
+same clone after gh repo set-default cli/cli            fm-gh-repo=cli/cli
+[exit 0]       gh=cli/cli
+origin on gitlab.com only                               fm-gh-repo=[exit 1]               gh=none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`
+no remotes                                              fm-gh-repo=[exit 1]               gh=no git remotes found
+
+## GH_HOST naming an Enterprise host
+exit=1
+
+## not a git work tree
+error: /var/folders/7j/0y2hj3v547q6nx4my7w1t5x40000gn/T//ghrepo-live.OBYSIU/plain is not a git work tree
+exit=2

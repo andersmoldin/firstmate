@@ -1,0 +1,11 @@
+ok - a clone with one GitHub origin resolves to owner/repo across URL forms
+ok - with no set-default choice the first GitHub remote in gh's upstream, github, origin order names the repository
+ok - a gh repo set-default choice, in either recorded form, outranks the remote order
+ok - several remotes naming one GitHub repository, beside a non-GitHub remote, resolve to it
+ok - a non-GitHub, remote-less, or malformed clone resolves to nothing
+ok - a GH_HOST naming another host resolves nothing, while GH_HOST=github.com still resolves
+ok - a directory that is not a git work tree exits 2
+exit=0
+ok - ship and scout workers carry their project's GitHub repository into the firstmate home in both allowlist postures
+ok - a project with no GitHub repository launches without GH_REPO
+exit=0

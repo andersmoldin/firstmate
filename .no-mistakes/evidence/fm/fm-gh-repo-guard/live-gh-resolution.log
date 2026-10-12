@@ -1,0 +1,26 @@
+## Fixture: a firstmate home clone (origin kunchenguid/firstmate) and a project clone (origin cli/cli)
+$ bin/fm-gh-repo.sh $T/project
+cli/cli
+exit=0
+
+## Reproduce the incident: shell inside the firstmate home, no --repo, no GH_REPO
+$ env -u GH_REPO gh issue view 34 --json url -q .url
+https://github.com/kunchenguid/firstmate/pull/34
+exit=0
+
+## With the GH_REPO fm-spawn would export
+GH_REPO=cli/cli
+$ gh issue view 34 --json url -q .url
+https://github.com/cli/cli/pull/34
+exit=0
+$ gh-axi issue view 34 | head -5
+gh: Could not resolve to an Issue with the number of 34.
+issue:
+  number: 34
+  repo: cli/cli
+  title: Eliminate package-level global state
+
+## Explicit --repo still overrides GH_REPO
+$ gh issue view 34 --repo kunchenguid/firstmate --json url -q .url
+https://github.com/kunchenguid/firstmate/pull/34
+exit=0
