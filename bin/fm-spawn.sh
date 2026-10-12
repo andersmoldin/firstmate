@@ -5511,11 +5511,8 @@ fi
 # kill switch below it is an export statement, so it survives a compound raw
 # launch and the launch-env-allowlist `env -i` wrapper.
 LAUNCH="export FM_TASK_INBOX=$(shell_quote "$STATE_REAL/$ID.inbox"); $LAUNCH"
-# A ship or scout worker's gh and gh-axi commands infer their repository from
-# the current directory's remote, so a shell left inside the firstmate home
-# would address the firstmate repo itself. GH_REPO pins them to the project
-# from any directory; bin/fm-gh-repo.sh owns the resolution and prints nothing
-# when the project has no unambiguous GitHub repository.
+# Pin a ship or scout worker's gh and gh-axi commands to the project's GitHub
+# repository from any directory; bin/fm-gh-repo.sh owns why and how.
 if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
   if SPAWN_GH_REPO=$("$SCRIPT_DIR/fm-gh-repo.sh" "$PROJ_ABS" 2>/dev/null); then
     LAUNCH="export GH_REPO=$(shell_quote "$SPAWN_GH_REPO"); $LAUNCH"

@@ -19,7 +19,8 @@ new_clone() {  # <name>
 test_single_github_origin_names_the_repository() {
   local clone url out
   for url in git@github.com:acme/widget.git https://github.com/acme/widget \
-    ssh://git@ssh.github.com:443/acme/widget.git https://token@github.com/acme/widget.git/; do
+    ssh://git@ssh.github.com:443/acme/widget.git https://token@github.com/acme/widget.git/ \
+    https://www.GitHub.com/acme/widget git@github.com:/acme/widget.git; do
     clone=$(new_clone "origin-$(printf '%s' "$url" | tr -c 'a-z0-9' '-')")
     git -C "$clone" remote add origin "$url"
     out=$(env -u GH_HOST "$RESOLVE" "$clone") || fail "a clone whose origin is $url resolved nothing"
@@ -28,16 +29,32 @@ test_single_github_origin_names_the_repository() {
   pass "a clone with one GitHub origin resolves to owner/repo across URL forms"
 }
 
-test_fork_layout_without_a_default_is_ambiguous() {
-  local clone out status
-  clone=$(new_clone fork-ambiguous)
+test_fork_layout_follows_gh_remote_order() {
+  local clone out
+  # gh, with no set-default choice and no prompt, takes the first GitHub remote
+  # in its upstream, github, origin order, whichever of them is the fork.
+  clone=$(new_clone fork-upstream)
   git -C "$clone" remote add origin git@github.com:someone/widget.git
   git -C "$clone" remote add upstream https://github.com/acme/widget.git
-  out=$(env -u GH_HOST "$RESOLVE" "$clone")
-  status=$?
-  expect_code 1 "$status" "a fork layout with no set-default choice must not guess a repository"
-  assert_equals "" "$out" "an ambiguous clone must print nothing"
-  pass "remotes naming different GitHub repositories with no set-default choice resolve to nothing"
+  out=$(env -u GH_HOST "$RESOLVE" "$clone") || fail "a fork layout resolved nothing"
+  assert_equals acme/widget "$out" "an upstream remote must win over origin, as it does for gh"
+  clone=$(new_clone fork-github)
+  git -C "$clone" remote add aaa git@github.com:first/widget.git
+  git -C "$clone" remote add origin git@github.com:someone/widget.git
+  git -C "$clone" remote add github https://github.com/acme/widget.git
+  out=$(env -u GH_HOST "$RESOLVE" "$clone") || fail "a github-named remote resolved nothing"
+  assert_equals acme/widget "$out" "a github remote must win over origin and unranked remotes"
+  clone=$(new_clone fork-origin)
+  git -C "$clone" remote add aaa git@github.com:first/widget.git
+  git -C "$clone" remote add origin git@github.com:acme/widget.git
+  out=$(env -u GH_HOST "$RESOLVE" "$clone") || fail "an origin remote resolved nothing"
+  assert_equals acme/widget "$out" "origin must win over an unranked remote"
+  clone=$(new_clone gitlab-upstream)
+  git -C "$clone" remote add upstream git@gitlab.com:other/widget.git
+  git -C "$clone" remote add origin git@github.com:acme/widget.git
+  out=$(env -u GH_HOST "$RESOLVE" "$clone") || fail "a GitHub origin beside a GitLab upstream resolved nothing"
+  assert_equals acme/widget "$out" "a non-GitHub remote must not outrank a GitHub one"
+  pass "with no set-default choice the first GitHub remote in gh's upstream, github, origin order names the repository"
 }
 
 test_set_default_choice_wins() {
@@ -49,7 +66,14 @@ test_set_default_choice_wins() {
   git -C "$clone" config remote.upstream.gh-resolved base
   out=$(env -u GH_HOST "$RESOLVE" "$clone") || fail "a clone with a set-default choice resolved nothing"
   assert_equals acme/widget "$out" "the gh repo set-default choice must name the repository"
-  pass "a gh repo set-default choice resolves a fork layout to the chosen repository"
+  # An older gh recorded the chosen repository itself rather than `base`.
+  clone=$(new_clone fork-default-legacy)
+  git -C "$clone" remote add origin git@github.com:acme/widget.git
+  git -C "$clone" remote add upstream https://github.com/other/widget.git
+  git -C "$clone" config remote.origin.gh-resolved acme/widget
+  out=$(env -u GH_HOST "$RESOLVE" "$clone") || fail "a legacy set-default value resolved nothing"
+  assert_equals acme/widget "$out" "a recorded owner/repo set-default value must name the repository"
+  pass "a gh repo set-default choice, in either recorded form, outranks the remote order"
 }
 
 test_same_repository_on_several_remotes_is_unambiguous() {
@@ -75,7 +99,12 @@ test_non_github_and_remote_less_clones_resolve_nothing() {
   out=$(env -u GH_HOST "$RESOLVE" "$clone")
   status=$?
   expect_code 1 "$status" "a clone with no remote must resolve to nothing"
-  pass "a non-GitHub or remote-less clone resolves to nothing"
+  clone=$(new_clone dot-segment)
+  git -C "$clone" remote add origin ssh://git@github.com/acme/..
+  out=$(env -u GH_HOST "$RESOLVE" "$clone")
+  status=$?
+  expect_code 1 "$status" "a dot path segment must not resolve to a repository: $out"
+  pass "a non-GitHub, remote-less, or malformed clone resolves to nothing"
 }
 
 test_other_gh_host_resolves_nothing() {
@@ -102,7 +131,7 @@ test_not_a_work_tree_is_an_error() {
 }
 
 test_single_github_origin_names_the_repository
-test_fork_layout_without_a_default_is_ambiguous
+test_fork_layout_follows_gh_remote_order
 test_set_default_choice_wins
 test_same_repository_on_several_remotes_is_unambiguous
 test_non_github_and_remote_less_clones_resolve_nothing
