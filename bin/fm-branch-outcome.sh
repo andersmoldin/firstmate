@@ -116,10 +116,10 @@
 #     Covering means the status log keeps the recorded file identity, and
 #     both its latest event and its latest event through the recorded
 #     statusEndpoint are <state> lines, so a changed terminal state is a new
-#     outcome. With --pr, that covered event or the row's summary must also
-#     name the PR as a whole word, so an outcome recorded before the PR existed
-#     (a pre-validation handoff) never covers the PR-ready line. A later line
-#     with the same state and PR is the same outcome, matching
+#     outcome. With --pr, that covered event must also name the PR as a whole
+#     word, so an outcome recorded before the PR existed (a pre-validation
+#     handoff) never covers the PR-ready line. A later line with the same
+#     state and PR is the same outcome, matching
 #     bin/fm-inactive-reconcile.sh's receipt identity, which asks this before
 #     waking main for an inactive terminal outcome.
 #   fm-branch-outcome.sh processed-init [--held-lock]
@@ -290,8 +290,7 @@ outcome_index_path() { # <task>
 
 # 0 when <text> names <pr> as a whole word, so .../pull/1 never matches .../pull/10.
 names_pr() { # <text> <pr>
-  # shellcheck disable=SC2141 # The backslash is a separator: @tsv escapes a summary's newlines as \n.
-  local words word IFS=$' \t()<>[]"\',;\\'
+  local words word IFS=$' \t()<>[]"\',;'
   read -r -a words <<< "$1"
   for word in "${words[@]}"; do
     [ "${word%.}" = "$2" ] && return 0
@@ -301,8 +300,8 @@ names_pr() { # <text> <pr>
 
 # 0 when one outcome's status provenance covers the task's current terminal
 # outcome (see processed-covers in the header usage).
-status_provenance_covers() { # <task> <state> <pr> <endpoint> <identity> <summary>
-  local f="$STATE/$1.status" state=$2 pr=$3 endpoint=$4 ident=$5 summary=$6 latest events_through_endpoint covered_event
+status_provenance_covers() { # <task> <state> <pr> <endpoint> <identity>
+  local f="$STATE/$1.status" state=$2 pr=$3 endpoint=$4 ident=$5 latest events_through_endpoint covered_event
   case "$endpoint" in ''|*[!0-9]*|0) return 1 ;; esac
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 1
   [ "$(_fm_open_decisions_file_ident "$f" 2>/dev/null)" = "$ident" ] || return 1
@@ -312,7 +311,7 @@ status_provenance_covers() { # <task> <state> <pr> <endpoint> <identity> <summar
   covered_event=${events_through_endpoint##*$'\n'}
   [ "$(status_line_verb "$covered_event")" = "$state" ] || return 1
   [ -n "$pr" ] || return 0
-  names_pr "$covered_event" "$pr" || names_pr "$summary" "$pr"
+  names_pr "$covered_event" "$pr"
 }
 
 capture_status_position() { # <task>
@@ -741,16 +740,16 @@ case "$CMD" in
     if [ -s "$STORE" ] && ! ROW=$(jq -rs --arg task "$TASK" --argjson processed "$PROCESSED_SEQ" '
         map(select(.task == $task and .verdict == "captain" and .seq <= $processed)) | last // empty
         | select((.statusEndpoint | type) == "number" and (.statusIdent | type) == "string")
-        | [(.seq | tostring), (.statusEndpoint | tostring), .statusIdent, .summary] | @tsv' "$STORE"); then
+        | [(.seq | tostring), (.statusEndpoint | tostring), .statusIdent] | @tsv' "$STORE"); then
       fm_lock_release "$LOCK"
       exit 1
     fi
     fm_lock_release "$LOCK"
     [ -n "$ROW" ] || exit 1
-    IFS=$(printf '\t') read -r SEQ ENDPOINT IDENT SUMMARY <<EOF
+    IFS=$(printf '\t') read -r SEQ ENDPOINT IDENT <<EOF
 $ROW
 EOF
-    status_provenance_covers "$TASK" "$COVER_STATE" "$PR" "$ENDPOINT" "$IDENT" "$SUMMARY" || exit 1
+    status_provenance_covers "$TASK" "$COVER_STATE" "$PR" "$ENDPOINT" "$IDENT" || exit 1
     printf '%s\n' "$SEQ"
     ;;
   processed-init)

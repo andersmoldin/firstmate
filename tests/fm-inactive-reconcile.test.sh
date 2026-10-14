@@ -186,8 +186,6 @@ test_processed_branch_outcome_counts_as_presented() {
     || fail "an outcome main already processed as a branch outcome woke main again: $(cat "$MAIN/state/.wake-queue")"
   [ "$(outcome_count "$MAIN" presented)" = 1 ] && [ "$(outcome_count "$MAIN" pending)" = 0 ] \
     || fail "the branch-presented outcome did not leave a presented receipt"
-  grep -Fxq 'presented_via=branch-outcome:1' "$MAIN/state/terminal-outcomes/"*.presented \
-    || fail "the presented receipt does not name the branch outcome that presented it"
   printf 'working: tidying up after the run\n' >> "$MAIN/state/child.status"
   age "$MAIN/state/child.status"
   FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN" --startup

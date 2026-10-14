@@ -67,27 +67,25 @@
 # only after its corresponding inactive-outcome wake is handled.
 # Before queueing that wake, a main home with a branch outcome store asks
 # bin/fm-branch-outcome.sh processed-covers, the owner of when a processed
-# branch outcome covers it; a covered record becomes presented with
-# presented_via=branch-outcome:<seq> and no wake, and a query that times out
-# is retried on the next scan.
+# branch outcome covers it; a covered record becomes presented with no wake,
+# and a query that times out is retried on the next scan.
 # A receipt is intentionally independent of .hb-surfaced-* bookkeeping.
 #
 # New fm-terminal-outcome.v1 receipts contain schema, fingerprint, task_id,
 # incarnation, state, outcome_key, origin, phase, pr, created_epoch, and
-# notice_emitted, plus optional status_head, ledger_claim, and presented_via
-# fields. The inactive-path fingerprint binds only the spawn incarnation, task
-# id, terminal state, and PR text, never the child's last status line, so a
-# child that keeps appending routine prose after one terminal outcome yields
-# at most one parent event across scans and restarts; the last line is
-# retained in status_head as evidence. The ledger-path fingerprint instead
-# binds the incarnation, task id, terminal state, literal `ledger` origin, and
-# complete terminal ledger line. When a terminal ledger append races just
-# after the inactive path's final read, ledger_claim binds that one ledger
-# fingerprint to the already-delivered inactive receipt so the two publishers
-# cannot report one completion twice. Pending atomically becomes reported
-# after parent append or presented after main-home acknowledgement. The atomic
-# epoch/cursor marker's mtime gates scans, and its cursor records the last
-# child visited within the aggregate budget.
+# notice_emitted, plus optional status_head and ledger_claim fields. The
+# inactive-path fingerprint binds only the spawn incarnation, task id, terminal
+# state, and PR text, never the child's last status line, so a child that keeps
+# appending routine prose after one terminal outcome yields at most one parent
+# event across scans and restarts; the last line is retained in status_head as
+# evidence. The ledger-path fingerprint instead binds the incarnation, task id,
+# terminal state, literal `ledger` origin, and complete terminal ledger line.
+# When a terminal ledger append races just after the inactive path's final read,
+# ledger_claim binds that one ledger fingerprint to the already-delivered
+# inactive receipt so the two publishers cannot report one completion twice.
+# Pending atomically becomes reported after parent append or presented after
+# main-home acknowledgement. The atomic epoch/cursor marker's mtime gates scans,
+# and its cursor records the last child visited within the aggregate budget.
 #
 # The scan reads only durable local state, fm-crew-state.sh, and the local
 # fm-branch-outcome.sh store; it never invokes gh, gh-axi, curl,
@@ -579,7 +577,6 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
   case "$covered_seq" in
     ''|*[!0-9]*) ;;
     *)
-      record_field_set "$RECORD_PENDING" presented_via "branch-outcome:$covered_seq" || return 1
       mark_presented "$RECORD_PENDING" || return 1
       return 0
       ;;
