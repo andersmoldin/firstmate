@@ -5,6 +5,7 @@
 #   fm-inactive-reconcile.sh scan [--startup]
 #   fm-inactive-reconcile.sh report <task-id>
 #   fm-inactive-reconcile.sh acknowledge <fingerprint>
+#   fm-inactive-reconcile.sh presented <fingerprint>
 #
 # This is an adjunct to the existing watcher poll loop and session-start path,
 # not a watcher, daemon, PR poll, or forge client of its own.
@@ -69,6 +70,10 @@
 # bin/fm-branch-outcome.sh processed-covers, the owner of when a processed
 # branch outcome covers it; a covered record becomes presented with no wake,
 # and a query that times out is retried on the next scan.
+# `presented <fingerprint>` is the read-only receipt query bin/fm-wake-drain.sh
+# asks before printing an inactive-outcome row: it exits 0 only when that
+# outcome has a presented record and no pending one, so a wake queued before
+# its outcome became presented is never shown to main again.
 # A receipt is intentionally independent of .hb-surfaced-* bookkeeping.
 #
 # New fm-terminal-outcome.v1 receipts contain schema, fingerprint, task_id,
@@ -679,6 +684,15 @@ acknowledge() { # <fingerprint>
   mark_presented "$pending"
 }
 
+presented() { # <fingerprint>
+  local fingerprint=$1 record
+  case "$fingerprint" in ''|*[!A-Fa-f0-9]*) return 2 ;; esac
+  record=$(record_path "$fingerprint" presented)
+  [ -f "$record" ] && [ ! -L "$record" ] || return 1
+  record=$(record_path "$fingerprint" pending)
+  [ ! -e "$record" ] && [ ! -L "$record" ]
+}
+
 acknowledge_notice() { # <fingerprint>
   local fingerprint=$1 pending
   case "$fingerprint" in ''|*[!A-Fa-f0-9]*) return 2 ;; esac
@@ -725,6 +739,10 @@ case "$mode" in
     fm_lock_acquire_wait "$SCAN_LOCK" || exit 1
     trap 'fm_lock_release "$SCAN_LOCK"' EXIT
     acknowledge "$2"
+    ;;
+  presented)
+    [ "$#" -eq 2 ] || { printf 'usage: fm-inactive-reconcile.sh presented <fingerprint>\n' >&2; exit 2; }
+    presented "$2"
     ;;
   acknowledge-notice)
     [ "$#" -eq 2 ] || exit 2
