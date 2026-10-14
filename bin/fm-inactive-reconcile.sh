@@ -65,26 +65,33 @@
 # path share the same receipt store.
 # In a main home, a presentation-stage record is acknowledged by fm-wake-drain
 # only after its corresponding inactive-outcome wake is handled.
+# Before queueing that wake, a main home with a branch outcome store asks
+# bin/fm-branch-outcome.sh processed-covers, the owner of when a processed
+# branch outcome covers it; a covered record becomes presented with
+# presented_via=branch-outcome:<seq> and no wake, and a query that times out
+# is retried on the next scan.
 # A receipt is intentionally independent of .hb-surfaced-* bookkeeping.
 #
 # New fm-terminal-outcome.v1 receipts contain schema, fingerprint, task_id,
 # incarnation, state, outcome_key, origin, phase, pr, created_epoch, and
-# notice_emitted, plus optional status_head and ledger_claim fields. The
-# inactive-path fingerprint binds only the spawn incarnation, task id, terminal
-# state, and PR text, never the child's last status line, so a child that keeps
-# appending routine prose after one terminal outcome yields at most one parent
-# event across scans and restarts; the last line is retained in status_head as
-# evidence. The ledger-path fingerprint instead binds the incarnation, task id,
-# terminal state, literal `ledger` origin, and complete terminal ledger line.
-# When a terminal ledger append races just after the inactive path's final read,
-# ledger_claim binds that one ledger fingerprint to the already-delivered
-# inactive receipt so the two publishers cannot report one completion twice.
-# Pending atomically becomes reported after parent append or presented after
-# main-home acknowledgement. The atomic epoch/cursor marker's mtime gates scans,
-# and its cursor records the last child visited within the aggregate budget.
+# notice_emitted, plus optional status_head, ledger_claim, and presented_via
+# fields. The inactive-path fingerprint binds only the spawn incarnation, task
+# id, terminal state, and PR text, never the child's last status line, so a
+# child that keeps appending routine prose after one terminal outcome yields
+# at most one parent event across scans and restarts; the last line is
+# retained in status_head as evidence. The ledger-path fingerprint instead
+# binds the incarnation, task id, terminal state, literal `ledger` origin, and
+# complete terminal ledger line. When a terminal ledger append races just
+# after the inactive path's final read, ledger_claim binds that one ledger
+# fingerprint to the already-delivered inactive receipt so the two publishers
+# cannot report one completion twice. Pending atomically becomes reported
+# after parent append or presented after main-home acknowledgement. The atomic
+# epoch/cursor marker's mtime gates scans, and its cursor records the last
+# child visited within the aggregate budget.
 #
-# The scan reads only durable local state and fm-crew-state.sh; it never invokes
-# gh, gh-axi, curl, fm-pr-check.sh, fm-pr-poll.sh, or a state *.check.sh.
+# The scan reads only durable local state, fm-crew-state.sh, and the local
+# fm-branch-outcome.sh store; it never invokes gh, gh-axi, curl,
+# fm-pr-check.sh, fm-pr-poll.sh, or a state *.check.sh.
 set -u
 export LC_ALL=C
 
@@ -95,6 +102,8 @@ OUTCOME_DIR="$STATE/terminal-outcomes"
 SCAN_MARKER="$STATE/.inactive-outcome-reconcile"
 SCAN_LOCK="$STATE/.inactive-outcome-reconcile.lock"
 CREW_STATE_BIN="${FM_INACTIVE_CREW_STATE_BIN:-$SCRIPT_DIR/fm-crew-state.sh}"
+BRANCH_OUTCOME_BIN="$SCRIPT_DIR/fm-branch-outcome.sh"
+BRANCH_OUTCOME_STORE="$STATE/branch-outcomes.jsonl"
 
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
@@ -234,6 +243,12 @@ mark_reported() { # <record>
   [ -f "$record" ] && [ ! -L "$record" ] || return 1
   reported=${record%.pending}.reported
   mv -f "$record" "$reported"
+}
+
+mark_presented() { # <record>
+  local record=$1
+  [ -f "$record" ] && [ ! -L "$record" ] || return 1
+  mv -f "$record" "${record%.pending}.presented"
 }
 
 queue_key_exists() { # <key>
@@ -496,7 +511,8 @@ report_child() { # <id>
 }
 
 reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeout>
-  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind state_rc=0
+  local id=$1 meta=$2 self=${3:-} timeout=$4 status turn last age state_line state pr incarnation fingerprint outcome_key payload kind covered_seq remaining state_rc=0 started
+  started=$(date +%s)
   [ -f "$meta" ] && [ ! -L "$meta" ] || return 0
   kind=$(meta_field "$meta" kind)
   [ "$kind" = secondmate ] && return 0
@@ -547,6 +563,27 @@ reconcile_direct_child_locked() { # <id> <meta> <secondmate-id-or-empty> <timeou
     fi
     return 0
   fi
+  # An outcome main already processed through the branch outcome store was
+  # presented there; its receipt records that instead of waking main again.
+  # A home with no branch outcome store skips the query. Whole-second budgets
+  # round down, so the query always gets one second rather than deferring a
+  # child the scan could still finish.
+  covered_seq=
+  if [ -s "$BRANCH_OUTCOME_STORE" ]; then
+    remaining=$((timeout - ($(date +%s) - started)))
+    [ "$remaining" -ge 1 ] || remaining=1
+    covered_seq=$(fm_run_timed "$remaining" env FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
+      "$BRANCH_OUTCOME_BIN" processed-covers --task "$id" --state "$state" ${pr:+--pr "$pr"} 2>/dev/null) \
+      || { [ "$?" -ne 124 ] || return 3; covered_seq=; }
+  fi
+  case "$covered_seq" in
+    ''|*[!0-9]*) ;;
+    *)
+      record_field_set "$RECORD_PENDING" presented_via "branch-outcome:$covered_seq" || return 1
+      mark_presented "$RECORD_PENDING" || return 1
+      return 0
+      ;;
+  esac
   record_phase_set "$RECORD_PENDING" presentation || return 1
   payload="inactive terminal outcome awaiting captain presentation: child=$id state=$state"
   [ -z "$pr" ] || payload="$payload pr=$pr"
@@ -635,15 +672,14 @@ scan() {
 }
 
 acknowledge() { # <fingerprint>
-  local fingerprint=$1 pending presented phase
+  local fingerprint=$1 pending phase
   case "$fingerprint" in ''|*[!A-Fa-f0-9]*) return 2 ;; esac
   [ -d "$OUTCOME_DIR" ] && [ ! -L "$OUTCOME_DIR" ] || return 1
   pending=$(record_path "$fingerprint" pending)
-  presented=$(record_path "$fingerprint" presented)
   [ -f "$pending" ] && [ ! -L "$pending" ] || return 0
   phase=$(record_value "$pending" phase)
   [ "$phase" = presentation ] || return 0
-  mv -f "$pending" "$presented"
+  mark_presented "$pending"
 }
 
 acknowledge_notice() { # <fingerprint>
