@@ -71,9 +71,12 @@
 # branch outcome covers it; a covered record becomes presented with no wake,
 # and a query that times out is retried on the next scan.
 # `presented <fingerprint>` is the read-only receipt query bin/fm-wake-drain.sh
-# asks before printing an inactive-outcome row: it exits 0 only when that
-# outcome has a presented record and no pending one, so a wake queued before
-# its outcome became presented is never shown to main again.
+# asks, under its wake-queue lock, before printing an inactive-outcome row: it
+# exits 0 when that outcome has a presented record and no pending one, or a
+# pending presentation-stage record that processed-covers (lock-free, so it
+# cannot deadlock with the drain) already covers, so a wake queued before main
+# processed the same branch outcome is never shown to main again, even before
+# the next scan records it as presented.
 # A receipt is intentionally independent of .hb-surfaced-* bookkeeping.
 #
 # New fm-terminal-outcome.v1 receipts contain schema, fingerprint, task_id,
@@ -685,12 +688,19 @@ acknowledge() { # <fingerprint>
 }
 
 presented() { # <fingerprint>
-  local fingerprint=$1 record
+  local fingerprint=$1 pending record pr
   case "$fingerprint" in ''|*[!A-Fa-f0-9]*) return 2 ;; esac
+  pending=$(record_path "$fingerprint" pending)
+  if [ -f "$pending" ] && [ ! -L "$pending" ] && [ "$(record_value "$pending" phase)" = presentation ] \
+      && [ -s "$BRANCH_OUTCOME_STORE" ]; then
+    pr=$(record_value "$pending" pr)
+    env FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" "$BRANCH_OUTCOME_BIN" processed-covers \
+      --task "$(record_value "$pending" task_id)" --state "$(record_value "$pending" state)" \
+      ${pr:+--pr "$pr"} >/dev/null 2>&1 && return 0
+  fi
   record=$(record_path "$fingerprint" presented)
   [ -f "$record" ] && [ ! -L "$record" ] || return 1
-  record=$(record_path "$fingerprint" pending)
-  [ ! -e "$record" ] && [ ! -L "$record" ]
+  [ ! -e "$pending" ] && [ ! -L "$pending" ]
 }
 
 acknowledge_notice() { # <fingerprint>

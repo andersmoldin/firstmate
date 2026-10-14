@@ -121,7 +121,15 @@
 #     handoff) never covers the PR-ready line. A later line with the same
 #     state and PR is the same outcome, matching
 #     bin/fm-inactive-reconcile.sh's receipt identity, which asks this before
-#     waking main for an inactive terminal outcome.
+#     waking main for an inactive terminal outcome and again, through its
+#     `presented` query, while bin/fm-wake-drain.sh holds the wake-queue lock.
+#     So this read takes no outcome lock and can never wait on, or deadlock
+#     with, a lock holder. That is safe because the processed marker and read
+#     cursor are only atomically replaced and only advance, and the store is
+#     append-only: it reads the processed marker, then the cursor, then the
+#     store, so every consistent moment passes its ordering checks, and a
+#     marker, cursor, or store that is unreadable, malformed, out of order, or
+#     caught mid-append (an unterminated line) reads as not covered.
 #   fm-branch-outcome.sh processed-init [--held-lock]
 #     Validate the read cursor and the processed marker without changing them,
 #     then rebuild the bounded per-task outcome indexes. --held-lock is only
@@ -729,10 +737,8 @@ case "$CMD" in
     done
     outcome_index_path "$TASK" >/dev/null || usage
     case "$COVER_STATE" in done|failed) ;; *) usage ;; esac
-    fm_lock_acquire_wait "$LOCK"
-    if ! LAST_SEQ=$(last_seq) || ! CURSOR_SEQ=$(read_cursor) || ! PROCESSED_SEQ=$(read_processed) \
+    if ! PROCESSED_SEQ=$(read_processed) || ! CURSOR_SEQ=$(read_cursor) || ! LAST_SEQ=$(last_seq) \
         || [ "$CURSOR_SEQ" -gt "$LAST_SEQ" ] || [ "$PROCESSED_SEQ" -gt "$CURSOR_SEQ" ]; then
-      fm_lock_release "$LOCK"
       echo "error: refusing coverage read because the outcome store, cursor, or processed marker is unsafe" >&2
       exit 1
     fi
@@ -741,10 +747,8 @@ case "$CMD" in
         map(select(.task == $task and .verdict == "captain" and .seq <= $processed)) | last // empty
         | select((.statusEndpoint | type) == "number" and (.statusIdent | type) == "string")
         | [(.seq | tostring), (.statusEndpoint | tostring), .statusIdent] | @tsv' "$STORE"); then
-      fm_lock_release "$LOCK"
       exit 1
     fi
-    fm_lock_release "$LOCK"
     [ -n "$ROW" ] || exit 1
     IFS=$(printf '\t') read -r SEQ ENDPOINT IDENT <<EOF
 $ROW

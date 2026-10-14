@@ -204,38 +204,48 @@ test_processed_branch_outcome_counts_as_presented() {
   pass "a processed branch outcome counts as the presentation of the same terminal outcome"
 }
 
-# The scan queued the inactive presentation while the branch outcome was only
-# read, then main processed that branch outcome: the rescan records the outcome
-# as presented, and the drain withholds the already-queued wake while its
-# ordinary acknowledgement still consumes the row.
-test_wake_queued_before_branch_processing_is_withheld() {
-  local out err seq generation
-  make_world branch-processed-after-queue
-  write_child "$MAIN" child 'done: PR https://example.test/owner/repo/pull/1 checks green'
-  branch_captain_outcome "$MAIN" child \
-    'child is ready for review: https://example.test/owner/repo/pull/1' read
-  FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN" --startup
-  [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 1 ] \
-    || fail "the scan did not queue the inactive presentation for an unprocessed branch outcome"
-  branch_outcome "$MAIN" mark-processed --through 1 || fail "branch outcome mark-processed failed"
-  age "$MAIN/state/.inactive-outcome-reconcile"
-  FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN"
-  [ "$(outcome_count "$MAIN" presented)" = 1 ] && [ "$(outcome_count "$MAIN" pending)" = 0 ] \
-    || fail "the rescan did not record the processed branch outcome as presented"
-
-  out="$WORLD/drain.out"
-  err="$WORLD/drain.err"
+# Main drains, and must not see the queued inactive outcome, then its
+# ordinary acknowledgement must still consume the withheld row.
+drain_withholds_and_acknowledges_inactive_outcome() { # <when>
+  local when=$1 out="$WORLD/drain.out" err="$WORLD/drain.err" seq generation
   FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" > "$out" 2> "$err"
-  ! grep -q 'inactive-outcome:' "$out" \
-    || fail "the drain delivered an inactive outcome main already presented: $(cat "$out")"
+  ! grep -q 'awaiting captain presentation' "$out" \
+    || fail "$when, the drain delivered an inactive outcome main already presented: $(cat "$out")"
   seq=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation .*/\1/p' "$err")
   generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$err")
   [ -n "$seq" ] && [ -n "$generation" ] \
-    || { cat "$err"; fail "the drain withholding the row did not require its acknowledgement"; }
+    || { cat "$err"; fail "$when, the drain withholding the row did not require its acknowledgement"; }
   FM_HOME="$MAIN" FM_STATE_OVERRIDE="$MAIN/state" "$DRAIN" --ack-through "$seq" --recovery-generation "$generation" \
-    || fail "the acknowledgement of the withheld row failed"
+    || fail "$when, the acknowledgement of the withheld row failed"
   [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 0 ] \
-    || fail "the acknowledgement left the withheld inactive-outcome row queued"
+    || fail "$when, the acknowledgement left the withheld inactive-outcome row queued"
+  [ "$(outcome_count "$MAIN" presented)" = 1 ] && [ "$(outcome_count "$MAIN" pending)" = 0 ] \
+    || fail "$when, the withheld outcome did not end with a presented receipt"
+}
+
+# The scan queued the inactive presentation while the branch outcome was only
+# read, then main processed that branch outcome. Whether main drains before
+# the next scan (the watcher wakes it at once) or after a rescan recorded the
+# outcome as presented, the drain withholds the already-queued wake.
+test_wake_queued_before_branch_processing_is_withheld() {
+  local when
+  for when in 'draining before any rescan' 'draining after a rescan'; do
+    make_world "branch-processed-after-queue-${when// /-}"
+    write_child "$MAIN" child 'done: PR https://example.test/owner/repo/pull/1 checks green'
+    branch_captain_outcome "$MAIN" child \
+      'child is ready for review: https://example.test/owner/repo/pull/1' read
+    FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN" --startup
+    [ "$(wake_count "$MAIN" 'inactive-outcome:')" = 1 ] \
+      || fail "the scan did not queue the inactive presentation for an unprocessed branch outcome"
+    branch_outcome "$MAIN" mark-processed --through 1 || fail "branch outcome mark-processed failed"
+    if [ "$when" = 'draining after a rescan' ]; then
+      age "$MAIN/state/.inactive-outcome-reconcile"
+      FM_FAKE_CREW_STATE='done' run_reconcile "$MAIN"
+      [ "$(outcome_count "$MAIN" presented)" = 1 ] && [ "$(outcome_count "$MAIN" pending)" = 0 ] \
+        || fail "the rescan did not record the processed branch outcome as presented"
+    fi
+    drain_withholds_and_acknowledges_inactive_outcome "$when"
+  done
   pass "a wake queued before main processed the branch outcome is withheld and still acknowledged"
 }
 
