@@ -1,0 +1,39 @@
+lab tmux: firstmate:fm-aslan-ikon-beskuren
+== scenario: processed-first  (FM_HOME=lab home, real fm-crew-state.sh, real branch-outcome store)
+
+$ /Users/andersmoldin/.no-mistakes/worktrees/f161056694a7/01M4XPCB40FYFDXW1XMRRWJQVQ/bin/fm-crew-state.sh aslan-ikon-beskuren
+state: done · source: status-log · PR https://github.com/andersmoldin/aslan-private/pull/151 checks green
+[exit 0]
+
+$ supervision-host records the captain BRANCH OUTCOME for PR 151
+seq=1
+
+$ /Users/andersmoldin/.no-mistakes/worktrees/f161056694a7/01M4XPCB40FYFDXW1XMRRWJQVQ/bin/fm-branch-outcome.sh mark-read --through 1
+[exit 0]
+
+$ /Users/andersmoldin/.no-mistakes/worktrees/f161056694a7/01M4XPCB40FYFDXW1XMRRWJQVQ/bin/fm-branch-outcome.sh mark-processed --through 1
+[exit 0]
+
+$ /Users/andersmoldin/.no-mistakes/worktrees/f161056694a7/01M4XPCB40FYFDXW1XMRRWJQVQ/bin/fm-inactive-reconcile.sh scan --startup
+[exit 0]
+
+$ wake queue before drain
+(empty)
+
+$ terminal-outcome receipts
+87e396f4274a61b0fc1f19d9c18fab9f.presented
+
+$ fm-wake-drain.sh (what main sees)
+[exit 0]
+--- stdout
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+$ second drain (repeat check)
+(no inactive-outcome rows)

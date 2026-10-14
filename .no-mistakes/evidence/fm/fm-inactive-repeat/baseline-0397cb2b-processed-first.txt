@@ -1,0 +1,48 @@
+lab tmux: firstmate:fm-aslan-ikon-beskuren
+== scenario: processed-first  (FM_HOME=lab home, real fm-crew-state.sh, real branch-outcome store)
+
+$ /var/folders/7j/0y2hj3v547q6nx4my7w1t5x40000gn/T//fmlive-drv/base/bin/fm-crew-state.sh aslan-ikon-beskuren
+state: done · source: status-log · PR https://github.com/andersmoldin/aslan-private/pull/151 checks green
+[exit 0]
+
+$ supervision-host records the captain BRANCH OUTCOME for PR 151
+seq=1
+
+$ /var/folders/7j/0y2hj3v547q6nx4my7w1t5x40000gn/T//fmlive-drv/base/bin/fm-branch-outcome.sh mark-read --through 1
+[exit 0]
+
+$ /var/folders/7j/0y2hj3v547q6nx4my7w1t5x40000gn/T//fmlive-drv/base/bin/fm-branch-outcome.sh mark-processed --through 1
+[exit 0]
+
+$ /var/folders/7j/0y2hj3v547q6nx4my7w1t5x40000gn/T//fmlive-drv/base/bin/fm-inactive-reconcile.sh scan --startup
+actionable: inactive terminal outcome awaiting captain presentation: child=aslan-ikon-beskuren state=done pr=https://github.com/andersmoldin/aslan-private/pull/151
+[exit 0]
+
+$ wake queue before drain
+1792007622	1	check	inactive-outcome:87e396f4274a61b0fc1f19d9c18fab9f	inactive terminal outcome awaiting captain presentation: child=aslan-ikon-beskuren state=done pr=https://github.com/andersmoldin/aslan-private/pull/151
+
+$ terminal-outcome receipts
+87e396f4274a61b0fc1f19d9c18fab9f.pending
+
+$ fm-wake-drain.sh (what main sees)
+[exit 0]
+--- stdout
+1792007622	1	check	inactive-outcome:87e396f4274a61b0fc1f19d9c18fab9f	inactive terminal outcome awaiting captain presentation: child=aslan-ikon-beskuren state=done pr=https://github.com/andersmoldin/aslan-private/pull/151
+--- stderr
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 11628.1792007622.Yj3Ftl
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  After draining queued wakes, watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+
+$ wake queue after acknowledgement
+
+$ receipts after acknowledgement
+87e396f4274a61b0fc1f19d9c18fab9f.presented
+
+$ second drain (repeat check)
+(no inactive-outcome rows)

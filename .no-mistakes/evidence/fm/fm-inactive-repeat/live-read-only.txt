@@ -1,0 +1,48 @@
+lab tmux: firstmate:fm-aslan-ikon-beskuren
+== scenario: read-only  (FM_HOME=lab home, real fm-crew-state.sh, real branch-outcome store)
+
+$ /Users/andersmoldin/.no-mistakes/worktrees/f161056694a7/01M4XPCB40FYFDXW1XMRRWJQVQ/bin/fm-crew-state.sh aslan-ikon-beskuren
+state: done · source: status-log · PR https://github.com/andersmoldin/aslan-private/pull/151 checks green
+[exit 0]
+
+$ supervision-host records the captain BRANCH OUTCOME for PR 151
+seq=1
+
+$ /Users/andersmoldin/.no-mistakes/worktrees/f161056694a7/01M4XPCB40FYFDXW1XMRRWJQVQ/bin/fm-branch-outcome.sh mark-read --through 1
+[exit 0]
+
+$ /Users/andersmoldin/.no-mistakes/worktrees/f161056694a7/01M4XPCB40FYFDXW1XMRRWJQVQ/bin/fm-inactive-reconcile.sh scan --startup
+actionable: inactive terminal outcome awaiting captain presentation: child=aslan-ikon-beskuren state=done pr=https://github.com/andersmoldin/aslan-private/pull/151
+[exit 0]
+
+$ wake queue before drain
+1792007609	1	check	inactive-outcome:87e396f4274a61b0fc1f19d9c18fab9f	inactive terminal outcome awaiting captain presentation: child=aslan-ikon-beskuren state=done pr=https://github.com/andersmoldin/aslan-private/pull/151
+
+$ terminal-outcome receipts
+87e396f4274a61b0fc1f19d9c18fab9f.pending
+
+$ fm-wake-drain.sh (what main sees)
+[exit 0]
+--- stdout
+1792007609	1	check	inactive-outcome:87e396f4274a61b0fc1f19d9c18fab9f	inactive terminal outcome awaiting captain presentation: child=aslan-ikon-beskuren state=done pr=https://github.com/andersmoldin/aslan-private/pull/151
+BRANCH OUTCOMES (captain outcomes the supervision session recorded for you, one line per task, oldest first; each says what was true when it was recorded, so check the task's current state first, including its still-open decisions listed above under OPEN DECISIONS, and sort them into still open and already settled, such as a decision since answered, a PR since merged, or a task since finished - process the still-open ones as firstmate: tell the captain, land or merge what is ready, answer or escalate a decision, or act on a blocker; your reply to the captain covers only those, as if the settled ones had never been listed, and a settled one needs only the acknowledgement):
+[seq 1, recorded 0m ago] aslan-ikon-beskuren: aslan-ikon-beskuren is ready for review: https://github.com/andersmoldin/aslan-private/pull/151
+BRANCH OUTCOMES: after processing them run bin/fm-branch-outcome.sh mark-processed --through 1; until then every drain presents them again
+--- stderr
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 1579.1792007609.WgtZw6
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  After draining queued wakes, watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING: queued wakes pending - drain them with bin/fm-wake-drain.sh before anything else.
+
+$ wake queue after acknowledgement
+
+$ receipts after acknowledgement
+87e396f4274a61b0fc1f19d9c18fab9f.presented
+
+$ second drain (repeat check)
+(no inactive-outcome rows)
