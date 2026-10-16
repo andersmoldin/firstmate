@@ -1031,7 +1031,7 @@ load_held_reason() {  # <task-id>
   require_tasks_axi
   task_show_or_fail "$id" "task $id does not exist"
   # A hold whose --until date has passed reports held: no but keeps its reason.
-  [ "$(show_field_value "$show" state)" != done ] || fail "task $id is already closed"
+  [ "$(show_field_value "$show" state)" != "done" ] || fail "task $id is already closed"
   decoded=$(printf '%s\n' "$show" | fm_hold_reason_decode_stream toon) \
     || fail "could not decode the hold reason of $id"
   HELD_REASON=$(show_field_value "$decoded" hold_reason)
