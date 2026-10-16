@@ -1048,6 +1048,7 @@ command_reason() {
 
 command_append() {
   local id=${1:-} text_file='' text combined stored_reason
+  local -a hold_args=()
   [ "$#" -ge 1 ] || { usage >&2; exit 2; }
   shift
   while [ "$#" -gt 0 ]; do
@@ -1068,13 +1069,10 @@ command_append() {
   load_held_reason "$id"
   combined=$(printf '%s\n%s' "$HELD_REASON" "$text")
   stored_reason=$(fm_hold_reason_encode "$combined") || fail "could not encode the hold reason"
-  if [ -n "$HELD_UNTIL" ]; then
-    tasks_axi hold "$id" --reason "$stored_reason" --kind "${HELD_KIND:-captain}" --until "$HELD_UNTIL" >/dev/null \
-      || fail "could not append to the hold reason of $id"
-  else
-    tasks_axi hold "$id" --reason "$stored_reason" --kind "${HELD_KIND:-captain}" >/dev/null \
-      || fail "could not append to the hold reason of $id"
-  fi
+  [ -z "$HELD_KIND" ] || hold_args+=(--kind "$HELD_KIND")
+  [ -z "$HELD_UNTIL" ] || hold_args+=(--until "$HELD_UNTIL")
+  tasks_axi hold "$id" --reason "$stored_reason" "${hold_args[@]+"${hold_args[@]}"}" >/dev/null \
+    || fail "could not append to the hold reason of $id"
   printf '%s\n' "$id"
 }
 

@@ -1207,6 +1207,18 @@ test_reason_and_append_round_trip_a_held_reason() {
   assert_contains "$(tasks_in "$home" show sample-expired --full)" "hold_until: 2020-01-01" \
     "append lost the expired --until date"
 
+  tasks_in "$home" add sample-kindless "Kindless" --repo sample >/dev/null \
+    || fail "could not add the kindless sample task"
+  tasks_in "$home" hold sample-kindless --reason "start later" --until 2030-01-01 >/dev/null \
+    || fail "could not hold the kindless sample task"
+  run_captain "$home" append sample-kindless --text-file "$home/add2.txt" >/dev/null \
+    || fail "append refused a hold without a kind"
+  [ "$(run_captain "$home" reason sample-kindless)" = $'start later\nTredje.' ] \
+    || fail "append did not extend a hold without a kind"
+  shown=$(tasks_in "$home" show sample-kindless --full)
+  assert_not_contains "$shown" "hold_kind: captain" "append promoted a hold without a kind to a captain call"
+  assert_contains "$shown" "hold_until: 2030-01-01" "append lost the --until date of a hold without a kind"
+
   : > "$home/empty.txt"
   if run_captain "$home" append sample-append --text-file "$home/empty.txt" >/dev/null 2>&1; then
     fail "append accepted an empty text file"
