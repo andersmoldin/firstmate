@@ -1,0 +1,23 @@
+Sends approve/fix/skip for the step currently awaiting approval, then
+blocks until the next gate, CI-ready decision point, or final outcome.
+
+--wait bounds this hold (default 8m) so an agent harness with a 10-minute
+tool cap gets a structured return instead of an unbounded hang. Elapsed wait
+is not a failed run: inspect with axi status and reattach. A slow live daemon
+is retried after a health probe rather than reported as I/O failure.
+
+Commit post-pipeline follow-up work on top of the existing branch so every pipeline fix commit remains present. Never abort-and-restart, reset, or replace the branch in a way that drops prior gate-fix commits.
+
+Usage:
+  no-mistakes axi respond [flags]
+
+Flags:
+      --action string         approve | fix | skip (required)
+      --add-finding string    JSON finding object to add and fix (with --action fix)
+      --findings string       comma-separated finding IDs to fix (with --action fix)
+  -h, --help                  help for respond
+      --instructions string   guidance applied to the selected findings (with --action fix)
+      --reason string         exception reason preserved with Test approval (with --action approve)
+      --step string           step to respond to (default: the step awaiting approval)
+      --wait duration         maximum time to block driving this run before returning so the caller can reattach (default 8m0s)
+  -y, --yes                   auto-resolve subsequent eligible gates until a decision point or outcome; protected-path and Test unvalidated-work refusals require an explicit response
