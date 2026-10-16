@@ -1026,18 +1026,18 @@ HELD_REASON=
 HELD_KIND=
 HELD_UNTIL=
 load_held_reason() {  # <task-id>
-  local id=$1 show decoded held
+  local id=$1 show decoded
   validate_slug task-id "$id"
   require_tasks_axi
   task_show_or_fail "$id" "task $id does not exist"
-  held=$(show_field_value "$show" held)
-  [ "$held" = yes ] || fail "task $id is not held"
+  # A hold whose --until date has passed reports held: no but keeps its reason.
+  [ "$(show_field_value "$show" state)" != done ] || fail "task $id is already closed"
   decoded=$(printf '%s\n' "$show" | fm_hold_reason_decode_stream toon) \
     || fail "could not decode the hold reason of $id"
   HELD_REASON=$(show_field_value "$decoded" hold_reason)
   HELD_KIND=$(show_field_value "$show" hold_kind)
   HELD_UNTIL=$(show_field_value "$show" hold_until)
-  [ -n "$HELD_REASON" ] || fail "task $id has no hold reason"
+  [ -n "$HELD_REASON" ] || fail "task $id is not held"
 }
 
 command_reason() {

@@ -1197,6 +1197,16 @@ test_reason_and_append_round_trip_a_held_reason() {
   assert_contains "$shown" "hold_until: 2030-01-02" "append lost the --until date"
   assert_contains "$(cat "$home/data/backlog.md")" "Captain hold set:" "append lost the hold-set stamp"
 
+  run_captain "$home" hold sample-expired --title "Expired sample" \
+    --reason "old reason" --repo sample --until 2020-01-01 >/dev/null \
+    || fail "could not hold the expired sample call"
+  run_captain "$home" append sample-expired --text-file "$home/add2.txt" >/dev/null \
+    || fail "append refused a hold whose --until date has passed"
+  [ "$(run_captain "$home" reason sample-expired)" = $'old reason\nTredje.' ] \
+    || fail "an expired hold lost its reason"
+  assert_contains "$(tasks_in "$home" show sample-expired --full)" "hold_until: 2020-01-01" \
+    "append lost the expired --until date"
+
   : > "$home/empty.txt"
   if run_captain "$home" append sample-append --text-file "$home/empty.txt" >/dev/null 2>&1; then
     fail "append accepted an empty text file"
